@@ -155,17 +155,22 @@ collides into an existing registration). Agreed route on #468: capture call
 signatures black-box from this re-test, then write the handlers from those
 observations plus the v1 Jq code in `libs/spurs/`.
 
-Recipe (Windows; needs `game/` and `vfs/` from the package):
+Recipe (needs `game/` and `vfs/` from the package; headless on Linux too —
+ps3recomp's default RSX backend there is null, and the signals below are all
+log lines. **Title files are not available on this machine**, so the run has to
+happen wherever the package lives):
 
 1. Check out **this branch** — not PR #1's. The local shim registers handlers
    `first-match-wins` and would shadow #629's new code, invalidating the test.
 2. Sibling `../ps3recomp`: `git fetch --tags && git checkout v0.19.0`, rebuild
-   `ps3recomp_runtime.lib`.
+   the runtime library.
 3. `sh tools/relift.sh` — regenerates `src/gen/ppu_hle_nids.cpp` against the
    v0.19.0 checkout; that table is where #629's handlers enter the build.
-4. Build `shadow.exe`, then `sh tools/run.sh`.
+4. Build `shadow`, then `sh tools/run.sh`.
 
-Watch for: `CreateTaskset REJECT unregistered` gone; the `[hle] UNRESOLVED NID`
-list down to the nine Jq NIDs plus `0xFAA275A4` (avconf); the `fios worker cond`
+Watch for: `CreateTaskset REJECT unregistered` gone; the unresolved-NID list
+down to the nine Jq NIDs plus `0xFAA275A4` (avconf); the `fios worker cond`
 / `opWait` waits gone and `nico.psarc` opened; `packets[seen=…]` non-zero.
-`PS3_HLE_UNRESOLVED=fail` A/Bs which of the remaining NIDs is load-bearing.
+Signatures for the nine (r3..r10 + SP+112) come from ps3recomp PR #697, which
+also makes `PS3_HLE_UNRESOLVED=fail` work — upstream it is defined but never
+called, so the A/B is a no-op without it.
