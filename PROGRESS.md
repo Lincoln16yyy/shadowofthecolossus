@@ -15,7 +15,7 @@
 | 8. First boot | Enter the recompiled CRT | ✅ — reaches cellGcmInit + flip loop |
 | 9. PSARC | Open `nico.psarc` through the HLE `cellFs` VFS | ⬜ |
 | 10. Graphics | RSX → D3D12 via the live NV4097 engine | 🟡 — engine up, window open, 0 draw packets |
-| 11. SPURS | Job queue dispatch into the 8 lifted images | ⬜ — **blocked**: SPURS 2.0 + cellSpursJq unimplemented |
+| 11. SPURS | Job queue dispatch into the 8 lifted images | ⬜ — upstream v0.19.0 (#629) lands the taskset side; Jq still missing (ps3recomp#468); re-test queued 2026-11-06 |
 | 12. Input / audio | cellPad, cellAudio | ⬜ |
 
 ## Detailed log
@@ -140,3 +140,32 @@ rebuilt or re-run. Table and notes: `docs/spurs2-wall.md`.
 
 PR #1 (a local SPURS 2.0 → 1.0 shim) was declined: by its own comments it
 mirrors RPCS3 source and Sony SDK headers, and SPURS 2.0 belongs in ps3recomp.
+
+### 2026-11-06 — Re-test queued against ps3recomp v0.19.0
+
+ps3recomp v0.19.0 (2026-11-06) includes PR #629 — `cellSpursInitializeWithAttribute2`,
+`cellSpursCreateTaskset2`, `cellSpursCreateTask2` and both Attribute2 initializers —
+so the taskset half of the wall should be gone on the next run. The Jq side is
+still missing upstream: **nine** NIDs, not the four the closing comment on
+ps3recomp#468 counted — `_cellSpursCreateJobQueue`,
+`_cellSpursJobQueuePort2PushJobBody`, `cellSpursJobQueuePort2Sync` and all six
+`cellSpursJobQueueAttributeSet*`. Verified by grep of `v0.19.0` and `master` plus
+a regeneration of `gen_hle_nids.py --all` (1197 handlers; none of the nine
+collides into an existing registration). Agreed route on #468: capture call
+signatures black-box from this re-test, then write the handlers from those
+observations plus the v1 Jq code in `libs/spurs/`.
+
+Recipe (Windows; needs `game/` and `vfs/` from the package):
+
+1. Check out **this branch** — not PR #1's. The local shim registers handlers
+   `first-match-wins` and would shadow #629's new code, invalidating the test.
+2. Sibling `../ps3recomp`: `git fetch --tags && git checkout v0.19.0`, rebuild
+   `ps3recomp_runtime.lib`.
+3. `sh tools/relift.sh` — regenerates `src/gen/ppu_hle_nids.cpp` against the
+   v0.19.0 checkout; that table is where #629's handlers enter the build.
+4. Build `shadow.exe`, then `sh tools/run.sh`.
+
+Watch for: `CreateTaskset REJECT unregistered` gone; the `[hle] UNRESOLVED NID`
+list down to the nine Jq NIDs plus `0xFAA275A4` (avconf); the `fios worker cond`
+/ `opWait` waits gone and `nico.psarc` opened; `packets[seen=…]` non-zero.
+`PS3_HLE_UNRESOLVED=fail` A/Bs which of the remaining NIDs is load-bearing.
